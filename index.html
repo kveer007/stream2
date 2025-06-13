@@ -1,59 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Streaming with JSONP</title>
+  <meta charset="UTF-8">
+  <title>My Personal Streaming Site</title>
 </head>
 <body>
-  <h1>Streaming: Inception</h1>
+  <h1>Streaming: Inception.mp4</h1>
+
   <video id="player" controls width="640">
-    <source id="source" type="video/mp4">
+    Your browser does not support the video tag.
   </video>
 
   <script>
-    const videoTitle = 'Inception.mkv';               // or .mp4
-    const fileId     = '1pxyupX9vV0O8YuDcfGPSxkTnORdFlmx8';
-    const mimeType   = videoTitle.endsWith('.mkv')
-      ? 'video/x-matroska' : 'video/mp4';
+    // ——— CONFIGURATION ———
+    const videoTitle  = 'Inception.mp4';
+    const fileId      = '14gIi_g8UeMTP6RWg5IVYJ0KmR89aUXer';  // Your MP4 Drive ID
+    const progressUrl = 'https://hook.eu2.make.com/8ig7j0iepmk7e65go6kyr6hlz6sicjt3';  // GetProgress webhook
+    const saveUrl     = 'https://hook.eu2.make.com/of3gkqwtwwrjeo32v8vw5r4j3hxs18hf'; // SaveProgress webhook
 
-    // set up the video src
-    document.getElementById('source').src =
-      `https://drive.google.com/uc?export=download&id=${fileId}`;
-
-    // this callback will be invoked by the JSONP script
-    function onSheetData(json) {
-      // json.feed.entry is an array of rows
-      const rows = json.feed.entry.map(e => ({
-        title: e.gsx$title.$t,
-        time:  parseFloat(e.gsx$timeseconds.$t)
-      }));
-
-      // strip extension & match base name
-      const base = videoTitle.replace(/\.[^.]+$/, '').toLowerCase();
-      let row = rows.find(r => r.title.replace(/\.[^.]+$/, '').toLowerCase() === base);
-      if (!row) row = rows[0];  // fallback
-
-      video.currentTime = row.time || 0;
-    }
-
-    // inject the JSONP feed script
-    const script = document.createElement('script');
-    script.src = 
-      'https://spreadsheets.google.com/feeds/list/' +
-      'YOUR_SPREADSHEET_ID/od6/public/values?' +
-      'alt=json-in-script&callback=onSheetData';
-    document.body.appendChild(script);
-
-    // save progress (same as before)
-    function save(at) {
-      fetch('https://hook.eu2.make.com/of3gkqwtwwrjeo32v8vw5r4j3hxs18hf', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ title: videoTitle, time: Math.floor(at), lastWatched: new Date().toISOString() })
-      });
-    }
+    // ——— SET UP VIDEO ———
     const video = document.getElementById('player');
-    video.addEventListener('pause', () => save(video.currentTime));
-    video.addEventListener('ended', () => save(video.duration));
+    video.src  = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    video.load();
+
+    // ——— RESUME PLAYBACK ———
+    fetch(progressUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: videoTitle })
+    })
+    .then(res => res.json())
+    .then(data => {
+      const resumeTime = parseFloat(data.time) || 0;
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = resumeTime;
+      }, { once: true });
+    })
+    .catch(err => console.error('Error loading progress:', err));
+
+    // ——— SAVE PROGRESS ———
+    function saveProgress(time) {
+      fetch(saveUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: videoTitle,
+          time:  Math.floor(time),
+          lastWatched: new Date().toISOString()
+        })
+      }).catch(err => console.error('Error saving progress:', err));
+    }
+
+    video.addEventListener('pause', () => saveProgress(video.currentTime));
+    video.addEventListener('ended', () => saveProgress(video.duration));
   </script>
 </body>
 </html>
